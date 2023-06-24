@@ -23,7 +23,7 @@ import System.Environment(getArgs) #-}
 {-# COMPILE GHC showNat = T.pack . show #-}
 
 showError : Error → String
-showError (error line col msg) = showNat line ++ "." ++ showNat col ++ ": " ++ msg
+showError (error line col msg) = showNat (suc line) ++ "." ++ showNat (suc col) ++ ": " ++ msg
 
 main : Main
 main = run do

@@ -1,8 +1,6 @@
 Bool : Type
-tt : Bool Bool
+tt : Bool
 ff : Bool
-if : (A : Type) -> (b : Bool) -> (x : A) -> (y : A) -> A
-if-tt : (A : Type) -> (x : A) -> (y : A) -> if tt x y = x
-if-ff : (A : Type) -> (x : A) -> (y : A) -> if tt x y = y
-
-ex : tt
+if : (A : Type) -> (b : Bool) -> A -> A -> A
+if-tt : (A : Type) -> (x : A) -> (y : A) -> if A tt x y = x
+if-ff : (A : Type) -> (x : A) -> (y : A) -> if A tt x y = y

@@ -1,2 +1,10 @@
-Pair : ( A : Type ) -> ( B : ( x : A ) -> Type ) -> Type
-pair : ( A : Type ) -> ( B : ( x : A ) -> Type ) -> ( x : A ) -> ( y : B x ) -> Pair A B
+Pair : (A : Type) -> (B : A -> Type) -> Type
+pair : (A : Type) -> (B : A -> Type) -> (x : A) -> B x -> Pair A B
+
+fst : (A : Type) -> (B : A -> Type) -> Pair A B -> A
+snd : (A : Type) -> (B : A -> Type) -> (p : Pair A B) -> B (fst A B p)
+
+fst-comp : (A : Type) -> (B : A -> Type) -> (x : A) -> (y : B x) ->
+           fst A B (pair A B x y) = x
+snd-comp : (A : Type) -> (B : A -> Type) -> (x : A) -> (y : B x) ->
+           snd A B (pair A B x y) = y

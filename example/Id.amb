@@ -1,2 +1,16 @@
 Id : (A : Type) -> A -> A -> Type
 refl : (A : Type) -> (x : A) -> Id A x x
+subst : (A : Type) ->
+        (P : A -> Type) ->
+        (x : A) ->
+        (y : A) ->
+        Id A x y ->
+        P x ->
+        P y
+subst-comp : (A : Type) ->
+             (P : A -> Type) ->
+             (x : A) ->
+             (y : A) ->
+             (eq : Id A x y) ->
+             (p : P x) ->
+             subst A P x y eq p = p
