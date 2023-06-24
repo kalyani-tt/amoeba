@@ -1,0 +1,18 @@
+Nat : Type
+zero : Nat
+succ : Nat -> Nat
+
+nat-ind : (P : Nat -> Type) ->
+          ((n : Nat) -> P n -> P (succ n)) ->
+          P zero ->
+          (n : Nat) ->
+          P n
+nat-ind-zero : (P : Nat -> Type) ->
+               (sc : (n : Nat) -> P n -> P (succ n)) ->
+               (zc : P zero) ->
+               nat-ind P sc zc zero = zc
+nat-ind-succ : (P : Nat -> Type) ->
+               (sc : (n : Nat) -> P n -> P (succ n)) ->
+               (zc : P zero) ->
+               (n : Nat) ->
+               nat-ind P sc zc (succ n) = sc n (nat-ind P sc zc n)

@@ -1,0 +1,2 @@
+Pair : ( A : Type ) -> ( B : ( x : A ) -> Type ) -> Type
+pair : ( A : Type ) -> ( B : ( x : A ) -> Type ) -> ( x : A ) -> ( y : B x ) -> Pair A B

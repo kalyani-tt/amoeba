@@ -1,0 +1,6 @@
+name: amoeba
+include: src
+depend:
+    standard-library-1.7
+flags:
+    --allow-unsolved-metas

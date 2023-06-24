@@ -1,0 +1,2 @@
+Id : (A : Type) -> A -> A -> Type
+refl : (A : Type) -> (x : A) -> Id A x x
