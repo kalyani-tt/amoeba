@@ -40,7 +40,7 @@ synth (suc n) Γ A =
             nothing → fail
         yes refl ← pure (eq C D) where
             no _ → fail
-        pure (a , conv (≈trans B≈D (≈sym A≈C)) a∶B)) ++
+        pure (a , conv (≈trans B≈D (≈sym A≈C)) a∶B)) <|<
     (help A)
   where
     help : ∀ A → List (∃[ a ] (Γ ⊢ a ∶ A))
@@ -54,6 +54,5 @@ apply (suc n) Γ G f tp-f = pure (f , G , tp-f) ++ help G f tp-f where
     help : ∀ G f → Γ ⊢ f ∶ G → List (∃[ b ] ∃[ B ] (Γ ⊢ b ∶ B))
     help (Π A B) f tp-f = do
         a , tp-a ← synth n Γ A
-        b , B , tp-b ← apply n Γ (sub B a) (f $ a) (tp-$ tp-f tp-a)
-        pure (b , B , tp-b)
+        apply n Γ (sub B a) (f $ a) (tp-$ tp-f tp-a)
     help _ _ _ = fail
