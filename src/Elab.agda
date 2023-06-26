@@ -75,9 +75,9 @@ infer Γ (a ≈ b) (tminfo line col (ai ≈ bi)) ss = do
 infer Γ _ (tminfo line col _) _ = er (error line col "Cannot infer type of term")
 
 convert ns line col Γ a b = do
-    just (c , a≈c) ← ok (norm ns line col Γ a) where
+    just (c , a≈c) ← ok (norm Γ a) where
         nothing → er (error line col ("Reached maximum recursion depth normalizing term `" ++ pretty ns a ++ "`"))
-    just (d , b≈d) ← ok (norm ns line col Γ b) where
+    just (d , b≈d) ← ok (norm Γ b) where
         nothing → er (error line col ("Reached maximum recursion depth normalizing term `" ++ pretty ns b ++ "`"))
     refl ← help (eq c d)
     ok (≈trans a≈c (≈sym b≈d))
@@ -87,6 +87,6 @@ convert ns line col Γ a b = do
         help (no _) = er (error line col ("Could not convert terms `" ++ pretty ns a ++ "` and `" ++ pretty ns b ++ "`"))
 
 isΠ ns line col Γ a = do
-    just (Π A B , a≈Π) ← ok (norm ns line col Γ a) where
+    just (Π A B , a≈Π) ← ok (norm Γ a) where
         _ → er (error line col ("Could not convert term `" ++ pretty ns a ++ "` to a pi type"))
     ok (A , B , ≈sym a≈Π)
