@@ -1,5 +1,6 @@
 module Elab where
 
+open import Norm
 open import Info
 open import Core
 open import Data.List using(List; []; _∷_)
@@ -73,50 +74,11 @@ infer Γ (a ≈ b) (tminfo line col (ai ≈ bi)) ss = do
     ok (U , tp-≈)
 infer Γ _ (tminfo line col _) _ = er (error line col "Cannot infer type of term")
 
-defaultFuel = 100000
-
-norm : List String → ℕ → ℕ → ∀ Γ a → Elab (∃[ b ] (Γ ⊢ a ≈ b))
-norm ns line col Γ a = help defaultFuel a where
-    help : ℕ → ∀ a → Elab (∃[ b ] (Γ ⊢ a ≈ b))
-    help zero a = er (error line col ("Ran out of fuel normalizing term `" ++ pretty ns a ++ "`"))
-    help (suc n) (var i) = do
-        just (j , a , p) ← ok (search Γ i) where
-            nothing → ok (var i , ≈refl)
-        c , q ← help n a
-        ok (c , ≈trans (ext (tp-var p)) q)
-        where
-            search : ∀ Γ i → Maybe (∃[ j ] ∃[ a ] (j ∶ (var i ≈ a) ∈ Γ))
-            search ∙ i = nothing
-            search (Γ ◂ (var j ≈ a)) i with i ≟ j
-            ... | yes refl = just (0 , a , here)
-            ... | no _ =
-                search Γ i m>>= λ (k , b , k∈Γ) →
-                just (suc k , b , there k∈Γ)
-            search (Γ ◂ _) i =
-                search Γ i m>>= λ (k , b , k∈Γ) →
-                just (suc k , b , there k∈Γ)
-    help (suc n) (f $ a) = do
-        c , q ← help n a
-        λ' b , p ← help n f where
-            g , r → ok ((g $ c) , $≈$ r q)
-        e , r ← help n (sub b c)
-        ok (e , ≈trans ($≈$ p q) (≈trans λ≈β r))
-    help (suc n) (λ' b) = do
-        d , p ← help n b
-        ok (λ' d , λ≈λ p)
-    help (suc n) (Π A B) = do
-        C , p ← help n A
-        D , q ← help n B
-        ok (Π C D , Π≈Π p q)
-    help (suc n) U = ok (U , ≈refl)
-    help (suc n) (a ≈ b) = do
-        c , p ← help n a
-        d , q ← help n b
-        ok ((c ≈ d) , ≈≈≈ p q)
-
 convert ns line col Γ a b = do
-    c , a≈c ← norm ns line col Γ a
-    d , b≈d ← norm ns line col Γ b
+    just (c , a≈c) ← ok (norm ns line col Γ a) where
+        nothing → er (error line col ("Reached maximum recursion depth normalizing term `" ++ pretty ns a ++ "`"))
+    just (d , b≈d) ← ok (norm ns line col Γ b) where
+        nothing → er (error line col ("Reached maximum recursion depth normalizing term `" ++ pretty ns b ++ "`"))
     refl ← help (eq c d)
     ok (≈trans a≈c (≈sym b≈d))
     where
@@ -125,6 +87,6 @@ convert ns line col Γ a b = do
         help (no _) = er (error line col ("Could not convert terms `" ++ pretty ns a ++ "` and `" ++ pretty ns b ++ "`"))
 
 isΠ ns line col Γ a = do
-    Π A B , a≈Π ← norm ns line col Γ a where
+    just (Π A B , a≈Π) ← ok (norm ns line col Γ a) where
         _ → er (error line col ("Could not convert term `" ++ pretty ns a ++ "` to a pi type"))
     ok (A , B , ≈sym a≈Π)

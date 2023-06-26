@@ -16,3 +16,10 @@ nat-ind-succ : (P : Nat -> Type) ->
                (zc : P zero) ->
                (n : Nat) ->
                nat-ind P sc zc (succ n) = sc n (nat-ind P sc zc n)
+
+nat-rec : (A : Type) ->
+          (A -> A) ->
+          A ->
+          Nat ->
+          A
+nat-def : nat-rec = (\ A . nat-ind (\ _ . A))
