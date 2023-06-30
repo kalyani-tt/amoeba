@@ -22,4 +22,9 @@ nat-rec : (A : Type) ->
           A ->
           Nat ->
           A
-nat-def : nat-rec = (\ A . nat-ind (\ _ . A))
+
+add : (n : Nat) -> (m : Nat) -> (r : Nat) -> Prop
+add-zero : (n : Nat) -> add zero n n
+add-succ : (n : Nat) -> (m : Nat) -> (r : Nat) -> add n m r => add (succ n) m (succ r)
+
+ex : (n : Nat) -> zero

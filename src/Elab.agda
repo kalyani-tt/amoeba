@@ -110,9 +110,9 @@ isΠ ns line col Γ a = do
 isKind ns line col Γ a =
     (do
         just (U , a≈U) ← ok (norm Γ a) where
-            _ → er (error line col ("Not a U"))
+            _ → er (error line col ("FOO"))
         ok (inj₁ a≈U)) <|>
     (do
         just (P , a≈P) ← ok (norm Γ a) where
-            _ → er (error line col ("Not a kind"))
+            _ → er (error line col (pretty ns a ++ " is not a kind"))
         ok (inj₂ a≈P))
