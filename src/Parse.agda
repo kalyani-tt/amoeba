@@ -136,10 +136,6 @@ prec2 ss =
         pure (U , tminfo line col U)) <|>
     (do
         line , col ← loc
-        expect "Prop"
-        pure (P , tminfo line col P)) <|>
-    (do
-        line , col ← loc
         name ← single
         just i ← pure (lookupName name ss) where
             nothing → per (error line col ("No variable '" ++ name ++ "' in scope"))

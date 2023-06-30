@@ -39,7 +39,6 @@ check : ∀ Γ a A → TmInfo a → Scope → Elab (Γ ⊢ a ∶ A)
 infer : ∀ Γ a → TmInfo a → Scope → Elab (∃[ A ] (Γ ⊢ a ∶ A))
 convert : Scope → ℕ → ℕ → ∀ Γ a b → Elab (Γ ⊢ a ≈ b)
 isΠ : Scope → ℕ → ℕ → ∀ Γ a → Elab (∃[ A ] ∃[ B ] (Γ ⊢ Π A B ≈ a))
-isKind : Scope → ℕ → ℕ → ∀ Γ a → Elab ((Γ ⊢ a ≈ U) ⊎ (Γ ⊢ a ≈ P))
 
 elab γ γi = help ∙ γ γi [] where
     help : ∀ Γ γ → SigInfo γ → Scope → Elab (Γ ⊢ γ wf)
@@ -75,15 +74,13 @@ infer Γ (f $ a) (tminfo _ _ (fi@(tminfo line col _) $ ai)) ss = do
     ok (sub B a , tp-$ (conv (≈sym Π≈F) tp-f) tp-a)
 infer Γ (Π A B) (tminfo line col (Π bn Ai Bi)) ss = do
     tp-A ← check Γ A U Ai ss
-    K , tp-B ← infer (shfCtx (Γ ◂ A)) B Bi (bn ∷ ss)
-    K-kn ← isKind ss line col (shfCtx (Γ ◂ A)) K
-    ok (U , ([ (λ K≈U → tp-UΠ tp-A (conv K≈U tp-B)) , (λ K≈P → tp-PΠ tp-A (conv K≈P tp-B)) ] K-kn))
+    tp-B ← check (shfCtx (Γ ◂ A)) B U Bi (bn ∷ ss)
+    ok (U , tp-Π tp-A tp-B)
 infer Γ U _ _ = ok (U , tp-U)
-infer Γ P _ _ = ok (U , tp-P)
 infer Γ (A ⇒ B) (tminfo _ _ (Ai ⇒ Bi)) ss = do
-    tp-A ← check Γ A P Ai ss
-    tp-B ← check Γ B P Bi ss
-    ok (P , tp-⇒ tp-A tp-B)
+    tp-A ← check Γ A U Ai ss
+    tp-B ← check Γ B U Bi ss
+    ok (U , tp-⇒ tp-A tp-B)
 infer Γ (a ≈ b) (tminfo line col (ai ≈ bi)) ss = do
     _ ← infer Γ a ai ss
     _ ← infer Γ b bi ss
@@ -106,13 +103,3 @@ isΠ ns line col Γ a = do
     just (Π A B , a≈Π) ← ok (norm Γ a) where
         _ → er (error line col ("Could not convert term `" ++ pretty ns a ++ "` to a pi type"))
     ok (A , B , ≈sym a≈Π)
-
-isKind ns line col Γ a =
-    (do
-        just (U , a≈U) ← ok (norm Γ a) where
-            _ → er (error line col ("FOO"))
-        ok (inj₁ a≈U)) <|>
-    (do
-        just (P , a≈P) ← ok (norm Γ a) where
-            _ → er (error line col (pretty ns a ++ " is not a kind"))
-        ok (inj₂ a≈P))

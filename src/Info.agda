@@ -27,7 +27,6 @@ data TmPartsInfo where
     U : TmPartsInfo U
     _≈_ : TmInfo a → TmInfo b → TmPartsInfo (a ≈ b)
     _⇒_ : TmInfo A → TmInfo B → TmPartsInfo (A ⇒ B)
-    P : TmPartsInfo P
 
 record SigInfo γ where
     inductive
@@ -64,4 +63,3 @@ pretty = help false where
     help p ss U = "U"
     help p ss (a ≈ b) = paren p (help false ss a ++ " = " ++ help false ss b)
     help p ss (A ⇒ B) = paren p (help true ss A) ++ " => " ++ help false ss B
-    help p ss P = "P"

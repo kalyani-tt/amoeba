@@ -36,7 +36,7 @@ data Tm where
     λ' : (b : Tm) → Tm
     Π : (A B : Tm) → Tm
     _⇒_ : (A B : Tm) → Tm
-    U P : Tm
+    U : Tm
     _≈_ : (a b : Tm) → Tm
 
 shf : Tm → Tm
@@ -53,7 +53,6 @@ shf = help 0 module shf where
     help n U = U
     help n (a ≈ b) = help n a ≈ help n b
     help n (A ⇒ B) = help n A ⇒ help n B
-    help n P = P
 
 sub : Tm → Tm → Tm
 sub = help 0 where
@@ -71,7 +70,6 @@ sub = help 0 where
     help n U e = U
     help n (a ≈ b) e = help n a e ≈ help n b e
     help n (A ⇒ B) e = help n A e ⇒ help n B e
-    help n P e = P
 
 data Ctx where
     ∙ : Ctx
@@ -96,17 +94,13 @@ data _⊢_∶_ where
             Γ ⊢ λ' b ∶ Π A B
     tp-pλ : shfCtx (Γ ◂ A) ⊢ b ∶ shf B →
             Γ ⊢ λ' b ∶ A ⇒ B
-    tp-UΠ : Γ ⊢ A ∶ U →
-            shfCtx (Γ ◂ A) ⊢ B ∶ U →
-            Γ ⊢ Π A B ∶ U
-    tp-PΠ : Γ ⊢ A ∶ U →
-            shfCtx (Γ ◂ A) ⊢ B ∶ P →
-            Γ ⊢ Π A B ∶ U
-    tp-⇒ : Γ ⊢ A ∶ P →
-            Γ ⊢ B ∶ P →
-            Γ ⊢ A ⇒ B ∶ P
+    tp-Π : Γ ⊢ A ∶ U →
+           shfCtx (Γ ◂ A) ⊢ B ∶ U →
+           Γ ⊢ Π A B ∶ U
+    tp-⇒ : Γ ⊢ A ∶ U →
+            Γ ⊢ B ∶ U →
+            Γ ⊢ A ⇒ B ∶ U
     tp-U : Γ ⊢ U ∶ U
-    tp-P : Γ ⊢ P ∶ U
     tp-≈ : Γ ⊢ a ≈ b ∶ U
     conv : Γ ⊢ A ≈ B →
            Γ ⊢ a ∶ A →
@@ -198,13 +192,9 @@ eq (a ≈ b) (c ≈ d) with eq a c | eq b d
 ... | no p     | _ = no λ { refl → p refl }
 ... | _        | no p = no λ { refl → p refl }
 eq (var i) (b ⇒ b₁) = no (λ ())
-eq (var i) P = no (λ ())
 eq (a $ a₁) (b ⇒ b₁) = no (λ ())
-eq (a $ a₁) P = no (λ ())
 eq (λ' a) (b ⇒ b₁) = no (λ ())
-eq (λ' a) P = no (λ ())
 eq (Π a a₁) (b ⇒ b₁) = no (λ ())
-eq (Π a a₁) P = no (λ ())
 eq (a ⇒ a₁) (var i) = no (λ ())
 eq (a ⇒ a₁) (b $ b₁) = no (λ ())
 eq (a ⇒ a₁) (λ' b) = no (λ ())
@@ -214,17 +204,6 @@ eq (a ⇒ b) (c ⇒ d) with eq a c | eq b d
 ... | no p     | _ = no λ { refl → p refl }
 ... | _        | no p = no λ { refl → p refl }
 eq (a ⇒ a₁) U = no (λ ())
-eq (a ⇒ a₁) P = no (λ ())
 eq (a ⇒ a₁) (b ≈ b₁) = no (λ ())
 eq U (b ⇒ b₁) = no (λ ())
-eq U P = no (λ ())
-eq P (var i) = no (λ ())
-eq P (b $ b₁) = no (λ ())
-eq P (λ' b) = no (λ ())
-eq P (Π b b₁) = no (λ ())
-eq P (b ⇒ b₁) = no (λ ())
-eq P U = no (λ ())
-eq P P = yes refl
-eq P (b ≈ b₁) = no (λ ())
 eq (a ≈ a₁) (b ⇒ b₁) = no (λ ())
-eq (a ≈ a₁) P = no (λ ())

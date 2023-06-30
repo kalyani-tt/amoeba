@@ -23,7 +23,7 @@ nat-rec : (A : Type) ->
           Nat ->
           A
 
-add : (n : Nat) -> (m : Nat) -> (r : Nat) -> Prop
+add : (n : Nat) -> (m : Nat) -> (r : Nat) -> Type
 add-zero : (n : Nat) -> add zero n n
 add-succ : (n : Nat) -> (m : Nat) -> (r : Nat) -> add n m r => add (succ n) m (succ r)
 

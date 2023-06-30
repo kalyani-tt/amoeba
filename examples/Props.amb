@@ -1,0 +1,14 @@
+Conj : Type -> Type -> Type
+conj-intro : (A : Type) -> (B : Type) -> A => B => Conj A B
+conj-elim-fst : (A : Type) -> (B : Type) -> Conj A B => A
+conj-elim-snd : (A : Type) -> (B : Type) -> Conj A B => B
+
+Disj : Type -> Type -> Type
+disj-intro-left : (A : Type) -> (B : Type) -> A => Disj A B
+disj-intro-right : (A : Type) -> (B : Type) -> B => Disj A B
+disj-elim : (A : Type) -> (B : Type) -> (C : Type) -> (A => C) => (B => C) => Disj A B => C
+
+True : Type
+true-intro : True
+
+False : Type
