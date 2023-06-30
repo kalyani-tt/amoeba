@@ -26,6 +26,8 @@ data TmPartsInfo where
     Π : String → TmInfo A → TmInfo B → TmPartsInfo (Π A B)
     U : TmPartsInfo U
     _≈_ : TmInfo a → TmInfo b → TmPartsInfo (a ≈ b)
+    _⇒_ : TmInfo A → TmInfo B → TmPartsInfo (A ⇒ B)
+    P : TmPartsInfo P
 
 record SigInfo γ where
     inductive
@@ -57,9 +59,9 @@ pretty = help false where
     help : Bool → List String → Tm → String
     help p ss (var i) = lookup i ss
     help p ss (f $ a) = paren p (help false ss f ++ " " ++ help true ss a)
-    help p ss (λ' b) = "x. " ++ help false ("x" ∷ ss) b
+    help p ss (λ' b) = "\\x. " ++ help false ("x" ∷ ss) b
     help p ss (Π A B) = paren p ("(x : " ++ help true ss A ++ ") -> " ++ help false ("x" ∷ ss) B)
     help p ss U = "U"
     help p ss (a ≈ b) = paren p (help false ss a ++ " = " ++ help false ss b)
-
-tm = λ' (λ' (var 0 $ var 1))
+    help p ss (A ⇒ B) = paren p (help true ss A) ++ " => " ++ help false ss B
+    help p ss P = "P"

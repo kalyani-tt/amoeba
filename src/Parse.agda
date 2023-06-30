@@ -2,7 +2,7 @@ module Parse where
 
 open import Core
 open import Info
-open import Elab renaming(_>>=_ to _e>>=_)
+open import Elab renaming(_>>=_ to _e>>=_) hiding(_>>_; _<|>_)
 open import Data.String using(String; fromList; toList; _++_) renaming(_≟_ to eqStr)
 open import Data.Product hiding(map)
 open import Data.List using(List; []; _∷_; reverse; foldr; foldl; map; filter) renaming(_++_ to _l++_)
@@ -136,6 +136,10 @@ prec2 ss =
         pure (U , tminfo line col U)) <|>
     (do
         line , col ← loc
+        expect "Prop"
+        pure (P , tminfo line col P)) <|>
+    (do
+        line , col ← loc
         name ← single
         just i ← pure (lookupName name ss) where
             nothing → per (error line col ("No variable '" ++ name ++ "' in scope"))
@@ -187,6 +191,12 @@ prec0 ss =
         expect "->"
         B , Bi ← prec0 ("_" ∷ ss)
         pure (Π A B , tminfo line col (Π "_" Ai Bi))) <|>
+    (do
+        line , col ← loc
+        A , Ai ← prec1 ss
+        expect "=>"
+        B , Bi ← prec0 ss
+        pure ((A ⇒ B) , tminfo line col (Ai ⇒ Bi))) <|>
     prec1 ss
 
 {-# NON_TERMINATING #-}

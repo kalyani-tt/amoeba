@@ -8,6 +8,7 @@ open import Data.String using(String; _++_)
 open import Data.Product
 open import Data.Nat
 open import Data.Maybe using(Maybe; just; nothing) renaming(_>>=_ to _m>>=_)
+open import Data.Sum using(_⊎_; inj₁; inj₂; [_,_])
 
 Scope = List String
 
@@ -25,11 +26,20 @@ _>>=_ : ∀{A B} → Elab A → (A → Elab B) → Elab B
 ok a >>= k = k a
 er e >>= k = er e
 
+_>>_ : ∀{A B} → Elab A → Elab B → Elab B
+a >> b = a >>= λ _ → b
+
+_<|>_ : ∀{A} → Elab A → Elab A → Elab A
+ok a <|> _ = ok a
+er e <|> ok a = ok a
+_ <|> er e = er e
+
 elab : (γ : Sig) → SigInfo γ → Elab (∙ ⊢ γ wf)
 check : ∀ Γ a A → TmInfo a → Scope → Elab (Γ ⊢ a ∶ A)
 infer : ∀ Γ a → TmInfo a → Scope → Elab (∃[ A ] (Γ ⊢ a ∶ A))
 convert : Scope → ℕ → ℕ → ∀ Γ a b → Elab (Γ ⊢ a ≈ b)
 isΠ : Scope → ℕ → ℕ → ∀ Γ a → Elab (∃[ A ] ∃[ B ] (Γ ⊢ Π A B ≈ a))
+isKind : Scope → ℕ → ℕ → ∀ Γ a → Elab ((Γ ⊢ a ≈ U) ⊎ (Γ ⊢ a ≈ P))
 
 elab γ γi = help ∙ γ γi [] where
     help : ∀ Γ γ → SigInfo γ → Scope → Elab (Γ ⊢ γ wf)
@@ -42,7 +52,7 @@ elab γ γi = help ∙ γ γi [] where
 check Γ (λ' b) G (tminfo line col (λ' bn bi)) ss = do
     A , B , Π≈G ← isΠ ss line col Γ G
     tp-b ← check (shfCtx (Γ ◂ A)) b B bi (bn ∷ ss)
-    ok (conv Π≈G (tp-λ tp-b))
+    ok (conv Π≈G (tp-uλ tp-b))
 check Γ a A ai@(tminfo line col _) ss = do
     B , tp-a ← infer Γ a ai ss
     B≈A ← convert ss line col Γ B A
@@ -63,11 +73,17 @@ infer Γ (f $ a) (tminfo _ _ (fi@(tminfo line col _) $ ai)) ss = do
     A , B , Π≈F ← isΠ ss line col Γ F
     tp-a ← check Γ a A ai ss
     ok (sub B a , tp-$ (conv (≈sym Π≈F) tp-f) tp-a)
-infer Γ (Π A B) (tminfo _ _ (Π bn Ai Bi)) ss = do
+infer Γ (Π A B) (tminfo line col (Π bn Ai Bi)) ss = do
     tp-A ← check Γ A U Ai ss
-    tp-B ← check (shfCtx (Γ ◂ A)) B U Bi (bn ∷ ss)
-    ok (U , tp-Π tp-A tp-B)
+    K , tp-B ← infer (shfCtx (Γ ◂ A)) B Bi (bn ∷ ss)
+    K-kn ← isKind ss line col (shfCtx (Γ ◂ A)) K
+    ok (U , ([ (λ K≈U → tp-UΠ tp-A (conv K≈U tp-B)) , (λ K≈P → tp-PΠ tp-A (conv K≈P tp-B)) ] K-kn))
 infer Γ U _ _ = ok (U , tp-U)
+infer Γ P _ _ = ok (U , tp-P)
+infer Γ (A ⇒ B) (tminfo _ _ (Ai ⇒ Bi)) ss = do
+    tp-A ← check Γ A P Ai ss
+    tp-B ← check Γ B P Bi ss
+    ok (P , tp-⇒ tp-A tp-B)
 infer Γ (a ≈ b) (tminfo line col (ai ≈ bi)) ss = do
     _ ← infer Γ a ai ss
     _ ← infer Γ b bi ss
@@ -90,3 +106,13 @@ isΠ ns line col Γ a = do
     just (Π A B , a≈Π) ← ok (norm Γ a) where
         _ → er (error line col ("Could not convert term `" ++ pretty ns a ++ "` to a pi type"))
     ok (A , B , ≈sym a≈Π)
+
+isKind ns line col Γ a =
+    (do
+        just (U , a≈U) ← ok (norm Γ a) where
+            _ → er (error line col ("Not a U"))
+        ok (inj₁ a≈U)) <|>
+    (do
+        just (P , a≈P) ← ok (norm Γ a) where
+            _ → er (error line col ("Not a kind"))
+        ok (inj₂ a≈P))
