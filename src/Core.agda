@@ -34,6 +34,7 @@ data Tm where
     U : Tm
     _≈_ : (a b : Tm) → Tm
     rfl : Tm
+    hole : Tm
 
 shf : Tm → Tm
 shf = help 0 module shf where
@@ -49,6 +50,7 @@ shf = help 0 module shf where
     help n U = U
     help n (a ≈ b) = help n a ≈ help n b
     help n rfl = rfl
+    help n hole = hole
 
 sub : Tm → Tm → Tm
 sub = help 0 where
@@ -66,6 +68,7 @@ sub = help 0 where
     help n U e = U
     help n (a ≈ b) e = help n a e ≈ help n b e
     help n rfl e = rfl
+    help n hole e = hole
 
 data Ctx where
     ∙ : Ctx
@@ -100,6 +103,7 @@ data _⊢_tm where
            i ⊢ b tm →
            i ⊢ a ≈ b tm
     rfl-tm : i ⊢ rfl tm
+    hole-tm : i ⊢ hole tm
 
 data _⊢_∶_ where
     tp-var : i ∶ A ∈ Γ →
@@ -118,6 +122,7 @@ data _⊢_∶_ where
            Γ ⊢ a ≈ b ∶ U
     tp-rfl : Γ ⊢ a ≈ b →
              Γ ⊢ rfl ∶ a ≈ b
+    tp-hole : Γ ⊢ hole ∶ A
     conv : Γ ⊢ A ≈ B →
            Γ ⊢ a ∶ A →
            Γ ⊢ a ∶ B
@@ -159,6 +164,7 @@ erase (tp-Π {B = B} tp-A tp-B) = Π-tm (erase tp-A) ((subst (_⊢ B tm) (cong s
 erase tp-U = U-tm
 erase (tp-≈ a-tm b-tm) = ≈-tm a-tm b-tm
 erase (tp-rfl a≈b) = rfl-tm
+erase tp-hole = hole-tm
 erase (conv A≈B tp-a) = erase tp-a
 
 eq : (a b : Tm) → Dec (a ≡ b)
@@ -224,3 +230,18 @@ eq rfl (Π b b₁) = no (λ ())
 eq rfl U = no (λ ())
 eq rfl (b ≈ b₁) = no (λ ())
 eq rfl rfl = yes refl
+eq (var i) hole = no (λ ())
+eq (a $ a₁) hole = no (λ ())
+eq (λ' a) hole = no (λ ())
+eq (Π a a₁) hole = no (λ ())
+eq U hole = no (λ ())
+eq (a ≈ a₁) hole = no (λ ())
+eq rfl hole = no (λ ())
+eq hole (var i) = no (λ ())
+eq hole (b $ b₁) = no (λ ())
+eq hole (λ' b) = no (λ ())
+eq hole (Π b b₁) = no (λ ())
+eq hole U = no (λ ())
+eq hole (b ≈ b₁) = no (λ ())
+eq hole rfl = no (λ ())
+eq hole hole = yes refl
