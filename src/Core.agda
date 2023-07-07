@@ -3,12 +3,12 @@ module Core where
 open import Data.Nat public
 open import Data.Bool using(if_then_else_)
 open import Relation.Nullary public
-open import Relation.Binary.PropositionalEquality using(_≡_; refl; subst; cong) public
+open import Relation.Binary.PropositionalEquality using(_≡_; refl; subst; cong; sym) public
+open import Function using(id; _∘_)
 
 infix 0 _⊢_≈_
 infix 0 _∶_∈_
 infix 0 _⊢_∶_
-infix 0 _⊢_tm
 infixl 5 _$_
 infix 4 _≈_
 infixl 1 _◂_
@@ -17,7 +17,6 @@ data Tm : Set
 Ty = Tm
 data Ctx : Set
 data _∶_∈_ : ℕ → Ty → Ctx → Set
-data _⊢_tm : ℕ → Tm → Set
 data _⊢_∶_ : Ctx → Tm → Ty → Set
 data _⊢_≈_ : Ctx → Tm → Tm → Set
 
@@ -70,40 +69,36 @@ sub = help 0 where
     help n rfl e = rfl
     help n hole e = hole
 
+shfN : ℕ → Tm → Tm
+shfN 0 = id
+shfN (suc n) = shf ∘ shfN n
+
 data Ctx where
     ∙ : Ctx
     _◂_ : (Γ : Ctx) (A : Ty) → Ctx
+
+_<>_ : Ctx → Ctx → Ctx
+Γ <> ∙ = Γ
+Γ <> (Δ ◂ A) = (Γ <> Δ) ◂ A
 
 len : Ctx → ℕ
 len ∙ = 0
 len (Γ ◂ _) = suc (len Γ)
 
 shfCtx : Ctx → Ctx
-shfCtx ∙ = ∙
-shfCtx (Γ ◂ A) = shfCtx Γ ◂ shf A
+shfCtx = help 0 module shfCtx where
+    help : ℕ → Ctx → Ctx
+    help n ∙ = ∙
+    help n (Γ ◂ A) = help n Γ ◂ shf.help n A
+
+shfCtxN : ℕ → Ctx → Ctx
+shfCtxN 0 = id
+shfCtxN (suc n) = shfCtx ∘ shfCtxN n
 
 data _∶_∈_ where
     here : 0 ∶ A ∈ Γ ◂ A
     there : i ∶ A ∈ Γ →
             suc i ∶ A ∈ Γ ◂ B
-
-data _⊢_tm where
-    var-tm : i < j →
-             j ⊢ var i tm
-    λ-tm : suc i ⊢ b tm →
-           i ⊢ λ' b tm
-    $-tm : i ⊢ f tm →
-           i ⊢ a tm →
-           i ⊢ f $ a tm
-    Π-tm : i ⊢ A tm →
-           suc i ⊢ B tm →
-           i ⊢ Π A B tm
-    U-tm : i ⊢ U tm
-    ≈-tm : i ⊢ a tm →
-           i ⊢ b tm →
-           i ⊢ a ≈ b tm
-    rfl-tm : i ⊢ rfl tm
-    hole-tm : i ⊢ hole tm
 
 data _⊢_∶_ where
     tp-var : i ∶ A ∈ Γ →
@@ -117,12 +112,13 @@ data _⊢_∶_ where
            shfCtx (Γ ◂ A) ⊢ B ∶ U →
            Γ ⊢ Π A B ∶ U
     tp-U : Γ ⊢ U ∶ U
-    tp-≈ : len Γ ⊢ a tm →
-           len Γ ⊢ b tm →
+    tp-≈ : Γ ⊢ a ∶ A →
+           Γ ⊢ b ∶ A →
            Γ ⊢ a ≈ b ∶ U
     tp-rfl : Γ ⊢ a ≈ b →
              Γ ⊢ rfl ∶ a ≈ b
     tp-hole : Γ ⊢ hole ∶ A
+    tp-shf : Γ ⊢ a ∶ A → shfCtx (Γ ◂ B) ⊢ shf a ∶ shf A
     conv : Γ ⊢ A ≈ B →
            Γ ⊢ a ∶ A →
            Γ ⊢ a ∶ B
@@ -152,20 +148,6 @@ data _⊢_≈_ where
 shfCtx-len : len (shfCtx Γ) ≡ len Γ
 shfCtx-len {∙} = refl
 shfCtx-len {Γ ◂ A} rewrite shfCtx-len {Γ} = refl
-
-erase : Γ ⊢ a ∶ A → len Γ ⊢ a tm
-erase (tp-var x) = var-tm (help x) where
-    help : i ∶ A ∈ Γ → i < len Γ
-    help here = s≤s z≤n
-    help (there i∈Γ) = s≤s (help i∈Γ)
-erase (tp-$ tp-f tp-a) = $-tm (erase tp-f) (erase tp-a)
-erase (tp-λ {b = b} tp-b) = λ-tm (subst (_⊢ b tm) (cong suc shfCtx-len) (erase tp-b))
-erase (tp-Π {B = B} tp-A tp-B) = Π-tm (erase tp-A) ((subst (_⊢ B tm) (cong suc shfCtx-len) (erase tp-B)))
-erase tp-U = U-tm
-erase (tp-≈ a-tm b-tm) = ≈-tm a-tm b-tm
-erase (tp-rfl a≈b) = rfl-tm
-erase tp-hole = hole-tm
-erase (conv A≈B tp-a) = erase tp-a
 
 eq : (a b : Tm) → Dec (a ≡ b)
 eq (var i) (var i₁) with i ≟ i₁

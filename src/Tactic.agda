@@ -33,17 +33,15 @@ addName : Name → Context → Context
 addName v s = record s { bindings = v ∷ bindings s }
 
 data Mode : Set where
-    mcheck minfer msynth : Mode
+    mcheck minfer : Mode
 
 modeInp : Mode → Set
 modeInp mcheck = Ty
 modeInp minfer = ⊤
-modeInp msynth = ⊤
 
 modeOut : ∀ m → Ctx → modeInp m → Set
 modeOut mcheck Δ B = ∃[ b ] (Δ ⊢ b ∶ B)
 modeOut minfer Δ tt = ∃[ b ] ∃[ B ] ((Δ ⊢ b ∶ B))
-modeOut msynth Δ tt = ∃[ b ] (len Δ ⊢ b tm)
 
 data Holes (Γ : Ctx) (A : Ty) : Set where
     done : String → ∀ a → (tp-a : Γ ⊢ a ∶ A) → Holes Γ A
@@ -51,7 +49,6 @@ data Holes (Γ : Ctx) (A : Ty) : Set where
 
 pattern check s Γ A k = subgoal s mcheck Γ A k
 pattern infer s Γ k = subgoal s minfer Γ tt k
-pattern synth s Γ k = subgoal s msynth Γ tt k
 
 Tactic : Set
 Tactic = ∀{Γ A} → Holes Γ A → Error ⊎ Holes Γ A
@@ -59,11 +56,15 @@ Tactic = ∀{Γ A} → Holes Γ A → Error ⊎ Holes Γ A
 fillOut : ∀ m Γ inp → modeOut m Γ inp
 fillOut mcheck Γ inp = hole , tp-hole
 fillOut minfer Γ inp = hole , hole , tp-hole
-fillOut msynth Γ inp = hole , hole-tm
 
 fill : Holes Γ A → String × ∃[ a ] (Γ ⊢ a ∶ A)
 fill (done x a tp-a) = x , a , tp-a
 fill (subgoal x m Δ inp k) = fill (k "[?]" (fillOut m Δ inp))
+
+catNames : List Name → String
+catNames [] = ""
+catNames (v ∷ []) = v
+catNames (v ∷ vs) = v ++ " " ++ catNames vs
 
 run : ∀ Γ A → Tactic → Error ⊎ Holes Γ A
 run Γ A t = t (check (context []) Γ A λ doc (b , tp-b) → done doc b tp-b)
@@ -75,6 +76,9 @@ fetch : ∀ Γ i → Maybe (∃[ A ] (i ∶ A ∈ Γ))
 fetch ∙ i = nothing
 fetch (Γ ◂ A) zero = just (A , here)
 fetch (Γ ◂ B) (suc i) = Maybe.map (λ (A , i∈Γ) → A , there i∈Γ) (fetch Γ i)
+
+skip : Tactic
+skip s = ok s
 
 getIndex : Name → List Name → Error ⊎ ℕ
 getIndex v [] = er "getIndex"
@@ -94,6 +98,10 @@ _&_ : Tactic → Tactic → Tactic
 ... | ok h' = g h'
 ... | er e = er e
 
+admit : Tactic
+admit (subgoal s m Γ inp k) = ok (k "[!]" (fillOut m Γ inp))
+admit _ = er "admit"
+
 ascribe : Tactic
 ascribe (infer s Γ k) = ok
     (check s Γ U λ Ad (A , tp-A) →
@@ -108,13 +116,8 @@ parens (subgoal s m Γ inp k) = ok
 parens _ = er "parens"
 
 intros : List Name → Tactic
-intros [] s = ok s
-intros vs = help (λ bd → "λ" ++ names vs ++ ". " ++ bd) vs where
-    names : List Name → String
-    names [] = ""
-    names (v ∷ []) = v
-    names (v ∷ vs) = v ++ " " ++ names vs
-
+intros [] = skip
+intros vs = help (λ bd → "λ" ++ catNames vs ++ ". " ++ bd) vs where
     help : (String → String) → List Name → Tactic
     help f (v ∷ vs) (check s Γ (Π A B) k) = help f vs
         (check (addName v s) (shfCtx (Γ ◂ A)) B λ bd (b , tp-b) → k bd (λ' b , tp-λ tp-b))
@@ -134,28 +137,47 @@ apply v {ctx} {goal} (infer s Γ k) = do
     help (suc n) acc A tp-a = k acc (_ , A , tp-a)
 apply _ _ = er "apply"
 
+PiDisp : Name → String → String → String
+PiDisp "_" Ad Bd = Ad ++ " → " ++ Bd
+PiDisp v Ad Bd = "Π " ++ v ++ " : " ++ Ad ++ ". " ++ Bd
+
 Pi : Name → Tactic
 Pi v (infer s Γ k) = ok
     (check s Γ U λ Ad (A , tp-A) →
-     check (record s { bindings = v ∷ bindings s }) (shfCtx (Γ ◂ A)) U λ Bd (B , tp-B) →
-     k ("Π" ++ v ++ " : " ++ Ad ++ ". " ++ Bd) (Π A B , U , tp-Π tp-A tp-B))
+     check (addName v s) (shfCtx (Γ ◂ A)) U λ Bd (B , tp-B) →
+     k (PiDisp v Ad Bd) (Π A B , U , tp-Π tp-A tp-B))
+Pi v (check s Γ U k) = ok
+    (check s Γ U λ Ad (A , tp-A) →
+     check (addName v s) (shfCtx (Γ ◂ A)) U λ Bd (B , tp-B) →
+     k (PiDisp v Ad Bd) (Π A B , tp-Π tp-A tp-B))
+Pi v (check _ _ _ _) = er "Pi: Not a U"
 Pi _ _ = er "Pi"
+
+Arr = Pi "_"
 
 Univ : Tactic
 Univ (infer s Γ k) = ok (k "Type" (U , U , tp-U))
+Univ (check s Γ U k) = ok (k "Type" (U , tp-U))
+Univ (check _ _ _ _) = er "Univ: Not a U"
 Univ _ = er "Univ"
 
 Eq : Tactic
 Eq (infer s Γ k) = ok
-    (synth s Γ λ ad (a , a-tm) →
-     synth s Γ λ bd (b , b-tm) →
-     k (ad ++ " = " ++ bd) ((a ≈ b) , U , tp-≈ a-tm b-tm))
+    (check s Γ U λ Ad (A , tp-A) →
+     check s Γ A λ ad (a , tp-a) →
+     check s Γ A λ bd (b , tp-b) →
+     k (ad ++ " = " ++ bd) ((a ≈ b) , U , tp-≈ tp-a tp-b))
 Eq _ = er "Eq"
 
 hyp : Name → Tactic
 hyp v (infer s Γ k) = do
     i , A , i∈Γ ← getVar Γ v (bindings s)
     ok (k v (var i ,  A , tp-var i∈Γ))
+hyp v (check s Γ G k) = do
+    i , A , i∈Γ ← getVar Γ v (bindings s)
+    yes refl ← ok (eq A G) where
+        no _ → er "hyp: Not equal"
+    ok (k v (var i , tp-var i∈Γ))
 hyp _ _ = er "hyp"
 
 convert : Tactic
@@ -165,16 +187,13 @@ convert (check s Γ A k) = ok
      k bd (b , conv (ext tp-p) tp-b))
 convert _ = er "convert"
 
-erasure : Tactic
-erasure (synth s Γ k) = ok
-    (infer s Γ λ ad (a , A , tp-a) →
-     k ad (a , erase tp-a))
-erasure _ = er "erasure"
-
 eqRefl : Tactic
 eqRefl (infer s Γ k) = ok
-    (synth s Γ λ _ (a , a-tm) →
+    (infer s Γ λ _ (a , A , a-tm) →
      k "refl" (rfl , (a ≈ a) , tp-rfl ≈refl))
+eqRefl (check s Γ (a ≈ b) k) with eq a b
+... | yes refl = ok (k "refl" (rfl , tp-rfl ≈refl))
+... | no _ = er "Not identical terms"
 eqRefl _ = er "eqRefl"
 
 eqSym : Tactic
@@ -185,7 +204,7 @@ eqSym _ = er "eqSym"
 
 eqTrans : Tactic
 eqTrans (check s Γ (a ≈ c) k) = ok
-    (synth s Γ λ _ (b , b-tm) →
+    (infer s Γ λ _ (b , A , b-tm) →
      check s Γ (a ≈ b) λ pd (p , tp-p) →
      check s Γ (b ≈ c) λ qd (q , tp-q) →
      k (pd ++ " ∙ " ++ qd) (rfl , tp-rfl (≈trans (ext tp-p) (ext tp-q))))
@@ -206,8 +225,8 @@ eqLams _ = er "eqLams"
 
 eqBeta : Tactic
 eqBeta (infer s Γ k) = ok
-    (synth s Γ λ _ (b , b-tm) →
-     synth s Γ λ _ (a , a-tm) →
+    (infer s Γ λ _ (b , _ , b-tm) →
+     infer s Γ λ _ (a , _ , a-tm) →
      k "β" (rfl , (λ' b $ a ≈ sub b a) , tp-rfl λ≈β))
 eqBeta _ = er "eqBeta"
 
@@ -224,3 +243,16 @@ eqEqs (check s Γ ((a ≈ b) ≈ (c ≈ d)) k) = ok
      check s Γ (b ≈ d) λ qd (q , tp-q) →
      k ("cong-= " ++ pd ++ " " ++ qd) (rfl , tp-rfl (≈≈≈ (ext tp-p) (ext tp-q))))
 eqEqs _ = er "eqEqs"
+
+definition : Name → Tactic
+definition v (check s Γ U k) = ok
+    (check s Γ U λ Ad (A , tp-A) →
+     check s Γ A λ ad (a , tp-a) →
+     check (addName " " (addName v s)) (shfCtxN 2 Γ ◂ shfN 2 A ◂ (var 1 ≈ shfN 2 a)) U λ Bd (B , tp-B) →
+     k (v ++ " : " ++ Ad ++ "\n" ++ v ++ " ≔ " ++ ad ++ "\n\n" ++ Bd)
+       (Π A (Π (var 0 ≈ shf a) B) , tp-Π tp-A (tp-Π (tp-≈ (tp-var here) (tp-shf {B = A} tp-a)) tp-B)))
+definition _ _ = er "definition"
+
+qed : Tactic
+qed (check s Γ U k) = ok (k "" (U , tp-U))
+qed _ = er "qed"
