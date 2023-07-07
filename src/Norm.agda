@@ -46,7 +46,5 @@ norm Γ a = help defaultFuel a where
         c , p ← help n a
         d , q ← help n b
         just ((c ≈ d) , ≈≈≈ p q)
-    help (suc n) (A ⇒ B) = do
-        C , p ← help n A
-        D , q ← help n B
-        just ((C ⇒ D) , ⇒≈⇒ p q)
+    help (suc n) rfl = just (rfl , ≈refl)
+    help (suc n) hole = just (hole , ≈refl)

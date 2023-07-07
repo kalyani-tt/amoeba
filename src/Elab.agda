@@ -1,105 +1,132 @@
 module Elab where
 
-open import Norm
-open import Info
 open import Core
-open import Data.List using(List; []; _∷_)
-open import Data.String using(String; _++_)
+open import Norm
+open import Data.Sum as Sum
+open import Data.String hiding(_≈_) renaming(_≟_ to eqStr)
 open import Data.Product
-open import Data.Nat
-open import Data.Maybe using(Maybe; just; nothing) renaming(_>>=_ to _m>>=_)
-open import Data.Sum using(_⊎_; inj₁; inj₂; [_,_])
+open import Data.Unit
+open import Data.List hiding(_++_)
+open import Function using(id; case_of_)
+open import Data.Maybe using(Maybe; just; nothing)
+open import Data.Maybe as Maybe
 
-Scope = List String
+Error = String
+Name = String
 
-record Error : Set where
-    constructor error
+data Mode : Set where
+    chk inf : Mode
+
+record State : Set where
+    constructor state
     field
-        line col : ℕ
-        msg : String
+        bindings : List Name
+open State
 
-data Elab (A : Set) : Set where
-    ok : (a : A) → Elab A
-    er : (e : Error) → Elab A
+withName : Name → State → State
+withName v s = record s { bindings = v ∷ bindings s }
 
-_>>=_ : ∀{A B} → Elab A → (A → Elab B) → Elab B
-ok a >>= k = k a
-er e >>= k = er e
+catNames : List Name → String
+catNames [] = ""
+catNames (v ∷ []) = v
+catNames (v ∷ vs) = v ++ " " ++ catNames vs
 
-_>>_ : ∀{A B} → Elab A → Elab B → Elab B
-a >> b = a >>= λ _ → b
+modeInp : Ctx → Mode → Set
+modeInp Γ chk = Ty
+modeInp Γ inf = ⊤
 
-_<|>_ : ∀{A} → Elab A → Elab A → Elab A
-ok a <|> _ = ok a
-er e <|> ok a = ok a
-_ <|> er e = er e
+modeOut : (Γ : Ctx) (m : Mode) → modeInp Γ m → Set
+modeOut Γ chk A = ∃[ a ] (Γ ⊢ a ∶ A)
+modeOut Γ inf tt = ∃[ a ] ∃[ A ] (Γ ⊢ a ∶ A)
 
-elab : (γ : Sig) → SigInfo γ → Elab (∙ ⊢ γ wf)
-check : ∀ Γ a A → TmInfo a → Scope → Elab (Γ ⊢ a ∶ A)
-infer : ∀ Γ a → TmInfo a → Scope → Elab (∃[ A ] (Γ ⊢ a ∶ A))
-convert : Scope → ℕ → ℕ → ∀ Γ a b → Elab (Γ ⊢ a ≈ b)
-isΠ : Scope → ℕ → ℕ → ∀ Γ a → Elab (∃[ A ] ∃[ B ] (Γ ⊢ Π A B ≈ a))
+Elab : Mode → Set
+Elab m = State → ∀ Γ (inp : modeInp Γ m) → String × modeOut Γ m inp
 
-elab γ γi = help ∙ γ γi [] where
-    help : ∀ Γ γ → SigInfo γ → Scope → Elab (Γ ⊢ γ wf)
-    help Γ ∙ _ _ = ok ∙-wf
-    help Γ (A ◃ γ) (siginfo _ _ (Ai ◃ bn ∶ γi)) ss = do
-        tp-A ← check Γ A U Ai ss
-        γ-wf ← help (shfCtx (Γ ◂ A)) γ γi (bn ∷ ss)
-        ok (◃-wf tp-A γ-wf)
+run : ∀ A → Elab chk → String × modeOut ∙ chk A
+run A ea = ea (state []) ∙ A
 
-check Γ (λ' b) G (tminfo line col (λ' bn bi)) ss = do
-    A , B , Π≈G ← isΠ ss line col Γ G
-    tp-b ← check (shfCtx (Γ ◂ A)) b B bi (bn ∷ ss)
-    ok (conv Π≈G (tp-uλ tp-b))
-check Γ a A ai@(tminfo line col _) ss = do
-    B , tp-a ← infer Γ a ai ss
-    B≈A ← convert ss line col Γ B A
-    ok (conv B≈A tp-a)
+er : ∀ Γ m inp → String → String × modeOut Γ m inp
+er Γ chk inp e = "[ " ++ e ++ " ]" , hole , tp-hole
+er Γ inf inp e = "[ " ++ e ++ " ]" , hole , hole , tp-hole
 
-fetch : ℕ → ℕ → ∀ Γ i → Elab (∃[ A ] (i ∶ A ∈ Γ))
-fetch line col ∙ i = er (error line col "No such variable")
-fetch line col (Γ ◂ A) zero = ok (A , here)
-fetch line col (Γ ◂ A) (suc i) = do
-    A , i∈Γ ← fetch line col Γ i
-    ok (A , there i∈Γ)
+admit : Elab chk
+admit s Γ A = "[?]" , hole , tp-hole
 
-infer Γ (var i) (tminfo line col _) ss = do
-    A , i∈Γ ← fetch line col Γ i
-    ok (A , tp-var i∈Γ)
-infer Γ (f $ a) (tminfo _ _ (fi@(tminfo line col _) $ ai)) ss = do
-    F , tp-f ← infer Γ f fi ss
-    A , B , Π≈F ← isΠ ss line col Γ F
-    tp-a ← check Γ a A ai ss
-    ok (sub B a , tp-$ (conv (≈sym Π≈F) tp-f) tp-a)
-infer Γ (Π A B) (tminfo line col (Π bn Ai Bi)) ss = do
-    tp-A ← check Γ A U Ai ss
-    tp-B ← check (shfCtx (Γ ◂ A)) B U Bi (bn ∷ ss)
-    ok (U , tp-Π tp-A tp-B)
-infer Γ U _ _ = ok (U , tp-U)
-infer Γ (A ⇒ B) (tminfo _ _ (Ai ⇒ Bi)) ss = do
-    tp-A ← check Γ A U Ai ss
-    tp-B ← check Γ B U Bi ss
-    ok (U , tp-⇒ tp-A tp-B)
-infer Γ (a ≈ b) (tminfo line col (ai ≈ bi)) ss = do
-    _ ← infer Γ a ai ss
-    _ ← infer Γ b bi ss
-    ok (U , tp-≈)
-infer Γ _ (tminfo line col _) _ = er (error line col "Cannot infer type of term")
+switch : Elab inf → Elab chk
+switch ea s Γ A =
+    let da , a , B , tp-a = ea s Γ tt
+    in case (norm Γ A , norm Γ B) of λ
+        { (just (C , A≈C) , just (D , D≈B)) →
+            case eq C D of λ
+             { (yes refl) → da , a , conv (≈sym (≈trans A≈C (≈sym D≈B))) tp-a
+             ; (no _) → er Γ chk A "Types not equal"}
+        ; _ → er Γ chk A "Failed to normalize" }
 
-convert ns line col Γ a b = do
-    just (c , a≈c) ← ok (norm Γ a) where
-        nothing → er (error line col ("Reached maximum recursion depth normalizing term `" ++ pretty ns a ++ "`"))
-    just (d , b≈d) ← ok (norm Γ b) where
-        nothing → er (error line col ("Reached maximum recursion depth normalizing term `" ++ pretty ns b ++ "`"))
-    refl ← help (eq c d)
-    ok (≈trans a≈c (≈sym b≈d))
-    where
-        help : Dec (c ≡ d) → Elab (c ≡ d)
-        help (yes p) = ok p
-        help (no _) = er (error line col ("Could not convert terms `" ++ pretty ns a ++ "` and `" ++ pretty ns b ++ "`"))
+intros : List Name → Elab chk → Elab chk
+intros vs = help ("λ" ++ catNames vs) vs where
+    help : String → List Name → Elab chk → Elab chk
+    help acc [] eb s Γ B =
+        let db , b , tp-b = eb s Γ B
+        in (acc ++ ". " ++ db) , b , tp-b
+    help acc (v ∷ vs) eb s Γ (Π A B) =
+        let db , b , tp-b = help acc vs eb (withName v s) (shfCtx (Γ ◂ A)) B
+        in db , λ' b , tp-λ tp-b
+    help acc (_ ∷ _) _ _ Γ G = er Γ chk G "Not a Π"
 
-isΠ ns line col Γ a = do
-    just (Π A B , a≈Π) ← ok (norm Γ a) where
-        _ → er (error line col ("Could not convert term `" ++ pretty ns a ++ "` to a pi type"))
-    ok (A , B , ≈sym a≈Π)
+getIndex : Name → List Name → Maybe ℕ
+getIndex v [] = nothing
+getIndex v (v' ∷ vs) with eqStr v v'
+... | yes refl = just 0
+... | no _ = Maybe.map suc (getIndex v vs)
+
+fetch : ∀ Γ i → Maybe (∃[ A ] (i ∶ A ∈ Γ))
+fetch ∙ i = nothing
+fetch (Γ ◂ A) zero = just (A , here)
+fetch (Γ ◂ A) (suc i) = Maybe.map (λ (A ,  i∈Γ) → A , there i∈Γ) (fetch Γ i)
+
+hyp : Name → Elab inf
+hyp v s Γ tt with getIndex v (bindings s)
+hyp v s Γ tt | just i with fetch Γ i
+hyp v s Γ tt | just i | just (A , i∈Γ) = v , var i , A , tp-var i∈Γ
+hyp v s Γ tt | just i | nothing = er Γ inf tt "Bug in fetch"
+hyp v s Γ tt | nothing = er Γ inf tt ("No such variable " ++ v)
+
+pis : List Name → Elab chk → Elab chk → Elab chk
+pis vs eA eB s Γ G =
+    let dA , _ = eA s Γ G
+    in (help (λ dB → "Π " ++ catNames vs ++ " : " ++ dA ++ ". " ++ dB) vs eA eB) s Γ G
+  where
+    help : (String → String) → List Name → Elab chk → Elab chk → Elab chk
+    help acc [] eA eB s Γ G =
+        let dB , B , tp-B = eB s Γ G
+        in acc dB , B , tp-B
+    help acc (v ∷ vs) eA eB s Γ U =
+        let _ , A , tp-A = eA s Γ U
+            dB , B , tp-B = help acc vs eA eB (withName v s) (shfCtx (Γ ◂ A)) U
+        in dB , Π A B , tp-Π tp-A tp-B
+    help acc _ _ _ _ Γ G = er Γ chk G "Not a U"
+
+arr : Elab chk → Elab chk → Elab chk
+arr eA eB s Γ U =
+    let dA , A , tp-A = eA s Γ U
+        dB , B , tp-B = eB (withName "_" s) (shfCtx (Γ ◂ A)) U
+    in (dA ++ " → " ++ dB) , Π A B , tp-Π tp-A tp-B
+arr _ _ _ Γ G = er Γ chk G "Not a U"
+
+type : Elab chk
+type s Γ U = "Type" , U , tp-U
+type _ Γ G = er Γ chk G "Not a U"
+
+qed : Elab chk
+qed s Γ U = "" , U , tp-U
+qed _ Γ G = er Γ chk G "Not a U"
+
+definition : Name → Elab chk → Elab chk → Elab chk → Elab chk
+definition v eA ea eB s Γ U =
+    let dA , A , tp-A = eA s Γ U
+        da , a , tp-a = ea s Γ A
+        dB , B , tp-B = eB (withName "_" (withName v s)) (shfCtx (shfCtx (Γ ◂ A) ◂ (var 0 ≈ shf a))) U
+    in v ++ " : " ++ dA ++ "\n" ++ v ++ " ≔ " ++ da ++ "\n\n" ++ dB ,
+        Π A (Π (var 0 ≈ shf a) B) ,
+        tp-Π tp-A (tp-Π (tp-≈ (tp-var here) (tp-shf {B = A} tp-a)) tp-B)
+definition _ _ _ _ _ Γ G = er Γ chk G "Not a U"

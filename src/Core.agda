@@ -3,17 +3,15 @@ module Core where
 open import Data.Nat public
 open import Data.Bool using(if_then_else_)
 open import Relation.Nullary public
-open import Relation.Binary.PropositionalEquality using(_≡_; refl) public
+open import Relation.Binary.PropositionalEquality using(_≡_; refl; subst; cong; sym) public
+open import Function using(id; _∘_)
 
 infix 0 _⊢_≈_
 infix 0 _∶_∈_
 infix 0 _⊢_∶_
-infix 0 _⊢_wf
 infixl 5 _$_
-infix 3 _⇒_
 infix 4 _≈_
 infixl 1 _◂_
-infixl 1 _◃_
 
 data Tm : Set
 Ty = Tm
@@ -21,13 +19,10 @@ data Ctx : Set
 data _∶_∈_ : ℕ → Ty → Ctx → Set
 data _⊢_∶_ : Ctx → Tm → Ty → Set
 data _⊢_≈_ : Ctx → Tm → Tm → Set
-data Sig : Set          
-data _⊢_wf : Ctx → Sig → Set
 
 variable
-    a b c d e f g A B C D n m p q r : Tm
+    a b c d e f g A B C D p q r : Tm
     Γ Δ : Ctx
-    γ δ : Sig
     i j : ℕ
 
 data Tm where
@@ -35,9 +30,10 @@ data Tm where
     _$_ : (f a : Tm) → Tm
     λ' : (b : Tm) → Tm
     Π : (A B : Tm) → Tm
-    _⇒_ : (A B : Tm) → Tm
     U : Tm
     _≈_ : (a b : Tm) → Tm
+    rfl : Tm
+    hole : Tm
 
 shf : Tm → Tm
 shf = help 0 module shf where
@@ -52,7 +48,8 @@ shf = help 0 module shf where
     help n (Π A B) = Π (help n A) (help (suc n) B)
     help n U = U
     help n (a ≈ b) = help n a ≈ help n b
-    help n (A ⇒ B) = help n A ⇒ help n B
+    help n rfl = rfl
+    help n hole = hole
 
 sub : Tm → Tm → Tm
 sub = help 0 where
@@ -69,15 +66,34 @@ sub = help 0 where
     help n (Π A B) e = Π (help n A e) (help (suc n) B (shf.help n e))
     help n U e = U
     help n (a ≈ b) e = help n a e ≈ help n b e
-    help n (A ⇒ B) e = help n A e ⇒ help n B e
+    help n rfl e = rfl
+    help n hole e = hole
+
+shfN : ℕ → Tm → Tm
+shfN 0 = id
+shfN (suc n) = shf ∘ shfN n
 
 data Ctx where
     ∙ : Ctx
     _◂_ : (Γ : Ctx) (A : Ty) → Ctx
 
+_<>_ : Ctx → Ctx → Ctx
+Γ <> ∙ = Γ
+Γ <> (Δ ◂ A) = (Γ <> Δ) ◂ A
+
+len : Ctx → ℕ
+len ∙ = 0
+len (Γ ◂ _) = suc (len Γ)
+
 shfCtx : Ctx → Ctx
-shfCtx ∙ = ∙
-shfCtx (Γ ◂ A) = shfCtx Γ ◂ shf A
+shfCtx = help 0 module shfCtx where
+    help : ℕ → Ctx → Ctx
+    help n ∙ = ∙
+    help n (Γ ◂ A) = help n Γ ◂ shf.help n A
+
+shfCtxN : ℕ → Ctx → Ctx
+shfCtxN 0 = id
+shfCtxN (suc n) = shfCtx ∘ shfCtxN n
 
 data _∶_∈_ where
     here : 0 ∶ A ∈ Γ ◂ A
@@ -90,18 +106,19 @@ data _⊢_∶_ where
     tp-$ : Γ ⊢ f ∶ Π A B →
            Γ ⊢ a ∶ A →
            Γ ⊢ f $ a ∶ sub B a
-    tp-uλ : shfCtx (Γ ◂ A) ⊢ b ∶ B →
-            Γ ⊢ λ' b ∶ Π A B
-    tp-pλ : shfCtx (Γ ◂ A) ⊢ b ∶ shf B →
-            Γ ⊢ λ' b ∶ A ⇒ B
+    tp-λ : shfCtx (Γ ◂ A) ⊢ b ∶ B →
+           Γ ⊢ λ' b ∶ Π A B
     tp-Π : Γ ⊢ A ∶ U →
            shfCtx (Γ ◂ A) ⊢ B ∶ U →
            Γ ⊢ Π A B ∶ U
-    tp-⇒ : Γ ⊢ A ∶ U →
-            Γ ⊢ B ∶ U →
-            Γ ⊢ A ⇒ B ∶ U
     tp-U : Γ ⊢ U ∶ U
-    tp-≈ : Γ ⊢ a ≈ b ∶ U
+    tp-≈ : Γ ⊢ a ∶ A →
+           Γ ⊢ b ∶ A →
+           Γ ⊢ a ≈ b ∶ U
+    tp-rfl : Γ ⊢ a ≈ b →
+             Γ ⊢ rfl ∶ a ≈ b
+    tp-hole : Γ ⊢ hole ∶ A
+    tp-shf : Γ ⊢ a ∶ A → shfCtx (Γ ◂ B) ⊢ shf a ∶ shf A
     conv : Γ ⊢ A ≈ B →
            Γ ⊢ a ∶ A →
            Γ ⊢ a ∶ B
@@ -125,21 +142,12 @@ data _⊢_≈_ where
     ≈≈≈ : Γ ⊢ a ≈ c →
           Γ ⊢ b ≈ d →
           Γ ⊢ a ≈ b ≈ c ≈ d
-    ⇒≈⇒ : Γ ⊢ A ≈ C →
-           Γ ⊢ B ≈ D →
-           Γ ⊢ A ⇒ B ≈ C ⇒ D
     ext : Γ ⊢ p ∶ a ≈ b →
           Γ ⊢ a ≈ b
 
-data Sig where
-    ∙ : Sig
-    _◃_ : (A : Ty) (γ : Sig) → Sig
-
-data _⊢_wf where
-    ∙-wf : Γ ⊢ ∙ wf
-    ◃-wf : Γ ⊢ A ∶ U →
-            shfCtx (Γ ◂ A) ⊢ γ wf →
-            Γ ⊢ A ◃ γ wf
+shfCtx-len : len (shfCtx Γ) ≡ len Γ
+shfCtx-len {∙} = refl
+shfCtx-len {Γ ◂ A} rewrite shfCtx-len {Γ} = refl
 
 eq : (a b : Tm) → Dec (a ≡ b)
 eq (var i) (var i₁) with i ≟ i₁
@@ -191,19 +199,31 @@ eq (a ≈ b) (c ≈ d) with eq a c | eq b d
 ... | yes refl | yes refl = yes refl
 ... | no p     | _ = no λ { refl → p refl }
 ... | _        | no p = no λ { refl → p refl }
-eq (var i) (b ⇒ b₁) = no (λ ())
-eq (a $ a₁) (b ⇒ b₁) = no (λ ())
-eq (λ' a) (b ⇒ b₁) = no (λ ())
-eq (Π a a₁) (b ⇒ b₁) = no (λ ())
-eq (a ⇒ a₁) (var i) = no (λ ())
-eq (a ⇒ a₁) (b $ b₁) = no (λ ())
-eq (a ⇒ a₁) (λ' b) = no (λ ())
-eq (a ⇒ a₁) (Π b b₁) = no (λ ())
-eq (a ⇒ b) (c ⇒ d) with eq a c | eq b d
-... | yes refl | yes refl = yes refl
-... | no p     | _ = no λ { refl → p refl }
-... | _        | no p = no λ { refl → p refl }
-eq (a ⇒ a₁) U = no (λ ())
-eq (a ⇒ a₁) (b ≈ b₁) = no (λ ())
-eq U (b ⇒ b₁) = no (λ ())
-eq (a ≈ a₁) (b ⇒ b₁) = no (λ ())
+eq (var i) rfl = no (λ ())
+eq (a $ a₁) rfl = no (λ ())
+eq (λ' a) rfl = no (λ ())
+eq (Π a a₁) rfl = no (λ ())
+eq U rfl = no (λ ())
+eq (a ≈ a₁) rfl = no (λ ())
+eq rfl (var i) = no (λ ())
+eq rfl (b $ b₁) = no (λ ())
+eq rfl (λ' b) = no (λ ())
+eq rfl (Π b b₁) = no (λ ())
+eq rfl U = no (λ ())
+eq rfl (b ≈ b₁) = no (λ ())
+eq rfl rfl = yes refl
+eq (var i) hole = no (λ ())
+eq (a $ a₁) hole = no (λ ())
+eq (λ' a) hole = no (λ ())
+eq (Π a a₁) hole = no (λ ())
+eq U hole = no (λ ())
+eq (a ≈ a₁) hole = no (λ ())
+eq rfl hole = no (λ ())
+eq hole (var i) = no (λ ())
+eq hole (b $ b₁) = no (λ ())
+eq hole (λ' b) = no (λ ())
+eq hole (Π b b₁) = no (λ ())
+eq hole U = no (λ ())
+eq hole (b ≈ b₁) = no (λ ())
+eq hole rfl = no (λ ())
+eq hole hole = yes refl
