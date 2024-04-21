@@ -10,7 +10,7 @@ exception No_loadpath
 
 let load_plugin name =
     try
-        let paths = ["/mnt/c/Users/easha/Documents/dev/amoeba_base_plugins/_build/default"] in
+        let paths = [] in
         let rec loop = function
         | [] -> raise Not_found
         | path::paths ->
