@@ -1,0 +1,7 @@
+(library
+ (public_name amoeba_core)
+ (preprocess (pps ppx_deriving.show)))
+
+(env
+ (dev
+  (flags :standard -w -A)))

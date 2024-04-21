@@ -1,0 +1,7 @@
+(library
+ (public_name amoeba_inter)
+ (libraries amoeba_core dynlink))
+
+(env
+ (dev
+  (flags :standard -w -A)))
